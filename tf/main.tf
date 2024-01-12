@@ -23,12 +23,15 @@ resource "okta_app_group_assignment" "test-users-to-jwt-io" {
 resource "okta_app_oauth" "jwt-io" {
   label                      = "JWT.io"
   type                       = "browser"
-  grant_types                = ["implicit"]
-  response_types             = ["token", "id_token"]
+  grant_types                = ["implicit", "authorization_code"]
+  response_types             = ["token", "id_token", "code"]
   redirect_uris              = ["https://jwt.io/"]
   token_endpoint_auth_method = "none"
+  pkce_required              = false
 }
 
 output "jwt-io-client-id" {
   value = okta_app_oauth.jwt-io.client_id
 }
+
+## todo: 1st factory policy for jwt.io app

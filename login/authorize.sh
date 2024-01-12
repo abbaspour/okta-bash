@@ -6,7 +6,7 @@
 # License: MIT (https://github.com/abbaspour/okta-bash/blob/master/LICENSE)
 # #########################################################################################
 
-set -eo pipefail
+set -euo pipefail
 
 declare OKTA_DOMAIN=''
 
@@ -29,6 +29,8 @@ declare opt_clipboard=0
 declare opt_pp=1
 declare opt_open=''
 declare opt_browser=''
+
+command -v jq >/dev/null || { echo >&2 "error: jq not found";  exit 3; }
 
 function usage() {
     cat <<END >&2
@@ -53,34 +55,44 @@ USAGE: $0 [-d domain] [-c client_id] [-a server_id] [-R response_type] [-f flow]
         -v             # verbose
 
 eg,
-     $0 -d amin -s offline_access -o
+     $0 -d amin.okta.com -n "my nonce" -c c123 -C -f pkce
 END
     exit $1
 }
 
 urlencode() {
-    local length="${#1}"
-    for ((i = 0; i < length; i++)); do
-        local c="${1:i:1}"
-        case $c in
-        [a-zA-Z0-9.~_-]) printf "${c}" ;;
-        *) printf '%s' "$c" | xxd -p -u -c1 |
-            while read c; do printf '%%%s' "$c"; done ;;
-        esac
-    done
+    jq -rn --arg x "${1}" '$x|@uri'
+}
+
+base64_urlencode() {
+    echo -n "$1" | base64 -w0 | tr '+' '-' | tr '/' '_' | tr -d '='
+}
+
+random() {
+    # shellcheck disable=SC2034
+    for i in {0..32}; do echo -n $((RANDOM % 10)); done
+}
+
+gen_code_verifier() {
+    base64_urlencode "$(random)"
+}
+
+gen_code_challenge() {
+    readonly cc=$(echo -n "$1" | openssl dgst -binary -sha256)
+    base64_urlencode "$cc"
 }
 
 while getopts "d:c:a:R:f:u:s:p:M:S:n:H:b:CNohv?" opt; do
     case ${opt} in
     d) OKTA_DOMAIN=${OPTARG} ;;
     c) client_id=${OPTARG} ;;
-    a) authorizationServerId=${OPTARG} ;;
+    a) authorization_endpoint="/oauth2/${OPTARG}/v1/authorize" ;;
     R) response_type=$(echo "${OPTARG}" | tr ',' ' ') ;;
     f) opt_flow=${OPTARG} ;;
     u) redirect_uri=${OPTARG} ;;
     p) prompt=${OPTARG} ;;
     M) response_mode=${OPTARG} ;;
-    s) scope=$(echo ${OPTARG} | tr ',' ' ') ;;
+    s) scope=$(echo "${OPTARG}" | tr ',' ' ') ;;
     S) opt_state=${OPTARG} ;;
     n) opt_nonce=${OPTARG} ;;
     H) opt_login_hint=${OPTARG} ;;
@@ -117,7 +129,9 @@ esac
 [[ ${OKTA_DOMAIN} =~ ^http ]] || OKTA_DOMAIN=https://${OKTA_DOMAIN}
 
 
-declare authorize_params="client_id=${client_id}&${response_param}&nonce=$(urlencode ${opt_nonce})&redirect_uri=$(urlencode ${redirect_uri})&scope=$(urlencode "${scope}")"
+declare authorize_params
+
+authorize_params="client_id=${client_id}&${response_param}&nonce=$(urlencode "${opt_nonce}")&redirect_uri=$(urlencode "${redirect_uri}")&scope=$(urlencode "${scope}")"
 
 [[ -n "${prompt}" ]] && authorize_params+="&prompt=${prompt}"
 [[ -n "${response_mode}" ]] && authorize_params+="&response_mode=${response_mode}"
