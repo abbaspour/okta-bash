@@ -1,0 +1,1 @@
+curl  -X GET -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization: SSWS ${api_token}" "https://${yourOktaDomain}/api/v1/users/${userId}/factors"

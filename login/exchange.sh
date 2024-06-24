@@ -2,11 +2,18 @@
 
 ##########################################################################################
 # Author: Amin Abbaspour
-# Date: 2022-06-12
+# Date: 2024-01-12
 # License: MIT (https://github.com/abbaspour/okta-bash/blob/master/LICENSE)
+# https://developer.okta.com/docs/guides/configure-native-sso/main/
 ##########################################################################################
 
 set -ueo pipefail
+
+readonly DIR=$(dirname "${BASH_SOURCE[0]}")
+
+function urlencode() {
+    jq -rn --arg x "${1}" '$x|@uri'
+}
 
 function usage() {
   cat <<END >&2
@@ -15,10 +22,13 @@ USAGE: $0 [-d domain] [-c client_id] [-x client_secret] [-p code_verifier] [-u c
         -c client_id   # client ID
         -x secret      # client secret
         -p verifier    # PKCE code_verifier (no secret required)
-        -a code        # Authorization Code to exchange
-        -u callback    # callback URL
+        -A id          # authorization server id (default is "default")
+        -a code        # Authorization Code to exchange or id_token (if native SSO)
+        -D code        # Device Code to exchange (switches to device_code flow)
+        -S secret      # Device secret (switches to native SSO flow)
+        -u callback    # callback URL (default is https://jwt.io)
         -b             # HTTP Basic authentication (default is POST payload)
-        -U endpoint    # token endpoint URI (default is '/oauth/token')
+        -U endpoint    # token endpoint URI (default is '/v1/token')
         -k kid         # client public key jwt id
         -f private.pem # client private key pem file
         -h|?           # usage
@@ -36,25 +46,32 @@ declare client_secret=''
 declare redirect_uri='https://jwt.io'
 declare authorization_code=''
 declare code_verifier=''
+declare scope=''
+declare device_secret=''
 declare grant_type='authorization_code'
 declare code_type='code'
 declare http_basic=0
 declare kid=''
 declare private_pem=''
-declare token_endpoint='/oauth2/v1/token'
+declare token_endpoint='/oauth2/default/v1/token'
 
-while getopts "d:c:u:a:x:p:D:U:k:f:bhv?" opt; do
+[[ -f "${DIR}/.env" ]] && . "${DIR}/.env"
+
+while getopts "d:c:u:A:a:x:p:D:U:k:f:S:s:bhv?" opt; do
   case ${opt} in
   d) OKTA_DOMAIN=${OPTARG} ;;
   c) client_id=${OPTARG} ;;
   x) client_secret=${OPTARG} ;;
   u) redirect_uri=${OPTARG} ;;
+  A) token_endpoint="/oauth2/${OPTARG}/v1/token" ;;
   a) authorization_code=${OPTARG} ;;
   p) code_verifier=${OPTARG} ;;
   U) token_endpoint=${OPTARG} ;;
   k) kid=${OPTARG} ;;
   f) private_pem=${OPTARG} ;;
   D) code_type='device_code'; grant_type='urn:ietf:params:oauth:grant-type:device_code'; authorization_code=${OPTARG} ;;
+  S) grant_type='urn:ietf:params:oauth:grant-type:token-exchange'; device_secret=${OPTARG} ;;
+  s) scope=$(echo "${OPTARG}" | tr ',' ' ') ;;
   b) http_basic=1 ;;
   v) set -x ;;
   h | ?) usage 0 ;;
@@ -89,7 +106,13 @@ else
   readonly client_assertion=''
 fi
 
-declare -r BODY="client_id=${client_id}&grant_type=${grant_type}&redirect_uri=${redirect_uri}&${code_type}=${authorization_code}${secret}${client_assertion}"
+declare BODY="client_id=${client_id}&grant_type=${grant_type}&redirect_uri=${redirect_uri}${secret}${client_assertion}&scope=$(urlencode "${scope}")"
+
+if [[ -z "${device_secret}" ]]; then
+  BODY+="&${code_type}=${authorization_code}"
+else
+  BODY+="&actor_token=${device_secret}&actor_token_type=urn:x-oath:params:oauth:token-type:device-secret&subject_token=${authorization_code}&subject_token_type=urn:ietf:params:oauth:token-type:id_token&audience=$(urlencode "api://default")"
+fi
 
 [[ ${OKTA_DOMAIN} =~ ^http ]] || OKTA_DOMAIN=https://${OKTA_DOMAIN}
 
@@ -103,3 +126,5 @@ else
     --url "${OKTA_DOMAIN}${token_endpoint}" \
     --data "${BODY}"
 fi
+
+echo

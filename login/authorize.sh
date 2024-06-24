@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+readonly DIR=$(dirname "${BASH_SOURCE[0]}")
+
 declare OKTA_DOMAIN=''
 
 declare client_id=''
@@ -18,8 +20,9 @@ declare redirect_uri='https://jwt.io'
 declare scope='openid profile email'
 declare prompt=''
 declare response_mode=''
+declare idp=''
 
-declare authorization_endpoint='/oauth2/v1/authorize'
+declare authorization_endpoint='/oauth2/default/v1/authorize'
 
 declare opt_flow='implicit'
 declare opt_state='state'
@@ -34,10 +37,11 @@ command -v jq >/dev/null || { echo >&2 "error: jq not found";  exit 3; }
 
 function usage() {
     cat <<END >&2
-USAGE: $0 [-d domain] [-c client_id] [-a server_id] [-R response_type] [-f flow] [-u callback] [-s scope] [-p prompt] [-M mode] [-P|-m|-C|-N|-o|-h]
+USAGE: $0 [-d domain] [-c client_id] [-a server_id] [-r idp] [-R response_type] [-f flow] [-u callback] [-s scope] [-p prompt] [-M mode] [-P|-m|-C|-N|-o|-h]
         -d domain      # Okta domain
         -c client_id   # Okta client ID
-        -a id          # authorization server id
+        -A id          # authorization server id (default is "default")
+        -r id          # IdP ID to use as realm
         -R types       # comma separated response types (default is "${response_type}")
         -f flow        # OAuth2 flow type (implicit,code,pkce,hybrid)
         -u callback    # callback URL (default ${redirect_uri})
@@ -82,11 +86,14 @@ gen_code_challenge() {
     base64_urlencode "$cc"
 }
 
-while getopts "d:c:a:R:f:u:s:p:M:S:n:H:b:CNohv?" opt; do
+[[ -f "${DIR}/.env" ]] && . "${DIR}/.env"
+
+while getopts "d:c:A:r:R:f:u:s:p:M:S:n:H:b:CNohv?" opt; do
     case ${opt} in
     d) OKTA_DOMAIN=${OPTARG} ;;
     c) client_id=${OPTARG} ;;
-    a) authorization_endpoint="/oauth2/${OPTARG}/v1/authorize" ;;
+    A) authorization_endpoint="/oauth2/${OPTARG}/v1/authorize" ;;
+    r) idp="${OPTARG}" ;;
     R) response_type=$(echo "${OPTARG}" | tr ',' ' ') ;;
     f) opt_flow=${OPTARG} ;;
     u) redirect_uri=${OPTARG} ;;
@@ -133,6 +140,7 @@ declare authorize_params
 
 authorize_params="client_id=${client_id}&${response_param}&nonce=$(urlencode "${opt_nonce}")&redirect_uri=$(urlencode "${redirect_uri}")&scope=$(urlencode "${scope}")"
 
+[[ -n "${idp}" ]] && authorize_params+="&idp=${idp}"
 [[ -n "${prompt}" ]] && authorize_params+="&prompt=${prompt}"
 [[ -n "${response_mode}" ]] && authorize_params+="&response_mode=${response_mode}"
 [[ -n "${opt_state}" ]] && authorize_params+="&state=$(urlencode "${opt_state}")"
