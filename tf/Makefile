@@ -9,7 +9,7 @@ plan:
 	@TF_LOG=$(LOG_LEVEL) $(TF) plan -out $(PLAN_FILE)
 
 apply:
-	@$(TF) apply -auto-approve $(PLAN_FILE)
+	@TF_LOG=$(LOG_LEVEL) $(TF) apply -auto-approve $(PLAN_FILE)
 
 show:
 	$(TF) show

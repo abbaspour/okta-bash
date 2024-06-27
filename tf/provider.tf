@@ -8,16 +8,7 @@ terraform {
 }
 
 provider "okta" {
-  org_name    = var.okta_org_name
-  base_url    = "okta.com"
-  client_id   = "0oa3jqopq7CejpxBl3l7"
-  private_key = "converted-tf-private-key.pem"
-  scopes      = [
-    "okta.groups.manage",
-    "okta.apps.manage",
-    "okta.clients.manage",
-    "okta.policies.manage",
-    "okta.users.manage"
-  ]
-  log_level = 1
+  org_name  = var.okta_org_name
+  base_url  = var.okta_base_url
+  api_token = var.okta_api_token
 }

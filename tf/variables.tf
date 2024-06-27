@@ -3,14 +3,25 @@ variable "okta_org_name" {
   description = "Okta org name"
 }
 
-variable "okta_tf_client_id" {
-  type        = string
-  description = "Terraform client_id"
+variable "okta_base_url" {
+  type = string
+  description = "okta.com | oktapreview.com"
+  default = "okta.com"
 }
 
+variable "okta_api_token" {
+  type = string
+  sensitive = true
+}
 
 variable "default_password" {
   type = string
   description = "password for test users"
+  sensitive = true
+}
+
+variable "social_google_client_secret" {
+  type = string
+  description = "google social federation client_secret"
   sensitive = true
 }
